@@ -89,6 +89,8 @@ from ._solver import (
     CalculateJacobian as CalculateJacobian,
     Dopri5 as Dopri5,
     Dopri8 as Dopri8,
+    EES25 as EES25,
+    EES27 as EES27,
     Euler as Euler,
     EulerHeun as EulerHeun,
     GeneralShARK as GeneralShARK,

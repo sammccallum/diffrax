@@ -12,6 +12,8 @@ from .base import (
 from .bosh3 import Bosh3 as Bosh3
 from .dopri5 import Dopri5 as Dopri5
 from .dopri8 import Dopri8 as Dopri8
+from .ees25 import EES25 as EES25
+from .ees27 import EES27 as EES27
 from .euler import Euler as Euler
 from .euler_heun import EulerHeun as EulerHeun
 from .foster_langevin_srk import AbstractFosterLangevinSRK as AbstractFosterLangevinSRK
