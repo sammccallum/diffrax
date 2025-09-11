@@ -102,9 +102,11 @@ class ReversibleHeun(
         t1: RealScalarLike,
         y1: Y,
         args: Args,
+        ts_state: PyTree[RealScalarLike],
         solver_state: _SolverState,
         made_jump: BoolScalarLike,
     ) -> tuple[Y, DenseInfo, _SolverState, RESULTS]:
+        del made_jump, ts_state
         yhat1, vf1 = solver_state
 
         control = terms.contr(t0, t1)

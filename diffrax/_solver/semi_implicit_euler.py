@@ -81,10 +81,11 @@ class SemiImplicitEuler(AbstractReversibleSolver):
         t1: RealScalarLike,
         y1: tuple[Ya, Yb],
         args: Args,
+        ts_state: PyTree[RealScalarLike],
         solver_state: _SolverState,
         made_jump: BoolScalarLike,
     ) -> tuple[tuple[Ya, Yb], DenseInfo, _SolverState, RESULTS]:
-        del solver_state, made_jump
+        del solver_state, made_jump, ts_state
 
         term_1, term_2 = terms
         y1_1, y1_2 = y1

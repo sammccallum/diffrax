@@ -1024,8 +1024,15 @@ def _loop_reversible_bwd(
         t1 = ts[ts_index]
         t0 = ts[ts_index - 1]
 
+        # Any ts state required to reverse the forward step
+        # e.g. LeapfrogMidpoint requires tm1
+        tm1_index = ts_index - 2
+        tm1 = ts[tm1_index]
+        tm1 = jnp.where(tm1_index >= 0, tm1, t0)
+        ts_state = (tm1,)
+
         y0, dense_info, solver_state, result = solver.backward_step(
-            terms, t0, t1, y1, args, solver_state, False
+            terms, t0, t1, y1, args, ts_state, solver_state, False
         )
         assert result == RESULTS.successful
 
@@ -1094,6 +1101,7 @@ def _loop_reversible_bwd(
 
     state = jax.lax.while_loop(cond_fun, grad_step, state)
     _, _, y0, _, grad_y0, grad_state, grad_args, grad_terms = state
+    jax.debug.print("{}", y0)
 
     # Pull solver_state gradients back onto y0, args, terms.
 

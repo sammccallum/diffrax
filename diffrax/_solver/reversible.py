@@ -93,11 +93,11 @@ class UReversible(
 
     @property
     def root_finder(self):
-        return self.solver.root_finder  # pyright: ignore
+        return self.solver.root_finder
 
     @property
     def root_find_max_steps(self):
-        return self.solver.root_find_max_steps  # pyright: ignore
+        return self.solver.root_find_max_steps
 
     def order(self, terms: PyTree[AbstractTerm]) -> Optional[int]:
         return self.solver.order(terms)
@@ -133,6 +133,7 @@ class UReversible(
         solver_state: _SolverState,
         made_jump: BoolScalarLike,
     ) -> tuple[Y, Optional[Y], DenseInfo, _SolverState, RESULTS]:
+        del made_jump
         z0 = solver_state
 
         step_z0, _, _, _, result1 = self.solver.step(
@@ -158,9 +159,11 @@ class UReversible(
         t1: RealScalarLike,
         y1: Y,
         args: Args,
+        ts_state: PyTree[RealScalarLike],
         solver_state: _SolverState,
         made_jump: BoolScalarLike,
     ) -> tuple[Y, DenseInfo, _SolverState, RESULTS]:
+        del made_jump, ts_state
         z1 = solver_state
         step_y1, _, _, _, result1 = self.solver.step(
             terms, t1, t0, y1, args, None, True

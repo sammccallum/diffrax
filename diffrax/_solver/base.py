@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 else:
     from equinox import AbstractClassVar, AbstractVar
 from equinox.internal import ω
-from jaxtyping import PyTree
+from jaxtyping import Array, PyTree
 
 from .._custom_types import Args, BoolScalarLike, DenseInfo, RealScalarLike, VF, Y
 from .._heuristics import is_sde
@@ -369,6 +369,7 @@ class AbstractReversibleSolver(AbstractSolver[_SolverState]):
         t1: RealScalarLike,
         y1: Y,
         args: Args,
+        ts_state: PyTree[RealScalarLike],
         solver_state: _SolverState,
         made_jump: BoolScalarLike,
     ) -> tuple[Y, DenseInfo, _SolverState, RESULTS]:
@@ -384,6 +385,7 @@ class AbstractReversibleSolver(AbstractSolver[_SolverState]):
         - `t1`: The start of the interval that the backward step is made over.
         - `y1`: The current value of the solution at `t1`.
         - `args`: Any extra arguments passed to the vector field.
+        - `ts_state`: Any `ts` state required to reverse the forward `step`.
         - `solver_state`: Any evolving state for the solver itself, at `t1`.
         - `made_jump`: Whether there was a discontinuity in the vector field at `t1`.
             Some solvers (notably FSAL Runge--Kutta solvers) usually assume that there
