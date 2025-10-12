@@ -870,6 +870,34 @@ def loop(
         lambda s: s.save_state, final_state, save_state, is_leaf=_is_none
     )
 
+    # if t0 == t1 and we are using diffrax.ReversibleAdjoint then we need to update the
+    # reversible_ts and reversible_ts_index to get correct gradients
+    def _reversible_info_if_t0_equals_t1(reversible_ts, reversible_save_index):
+        reversible_ts = eqxi.buffer_at_set(final_state.reversible_ts, 1, t0)
+        reversible_save_index += 1
+        return reversible_ts, reversible_save_index
+
+    reversible_ts, reversible_save_index = jax.lax.cond(
+        eqxi.unvmap_any(t0 == t1),
+        lambda __ts, __index: jax.lax.cond(
+            t0 == t1,
+            lambda _ts, _index: _reversible_info_if_t0_equals_t1(_ts, _index),
+            lambda _ts, _index: (_ts, _index),
+            __ts,
+            __index,
+        ),
+        lambda __ts, __index: (__ts, __index),
+        final_state.reversible_ts,
+        final_state.reversible_save_index,
+    )
+
+    final_state = eqx.tree_at(
+        lambda s: (s.reversible_ts, s.reversible_save_index),
+        final_state,
+        (reversible_ts, reversible_save_index),
+        is_leaf=_is_none,
+    )
+
     final_state = _handle_static(final_state)
     result = RESULTS.where(cond_fun(final_state), RESULTS.max_steps_reached, result)
     aux_stats = dict()  # TODO: put something in here?

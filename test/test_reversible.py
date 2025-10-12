@@ -25,7 +25,15 @@ class VectorField(eqx.Module):
 
 
 @eqx.filter_value_and_grad
-def _loss(y0__args__term, solver, saveat, adjoint, stepsize_controller, dual_y0):
+def _loss(
+    y0__args__term,
+    solver,
+    saveat,
+    adjoint,
+    stepsize_controller,
+    dual_y0,
+    t0_equals_t1,
+):
     y0, args, term = y0__args__term
 
     if isinstance(stepsize_controller, diffrax.StepTo):
@@ -33,11 +41,16 @@ def _loss(y0__args__term, solver, saveat, adjoint, stepsize_controller, dual_y0)
     else:
         dt0 = 0.01
 
+    if t0_equals_t1:
+        t1 = 0
+    else:
+        t1 = 5
+
     sol = diffrax.diffeqsolve(
         term,
         solver,
         t0=0,
-        t1=5,
+        t1=t1,
         dt0=dt0,
         y0=y0,
         args=args,
@@ -54,7 +67,13 @@ def _loss(y0__args__term, solver, saveat, adjoint, stepsize_controller, dual_y0)
 
 
 def _compare_grads(
-    y0__args__term, base_solver, solver, saveat, stepsize_controller, dual_y0
+    y0__args__term,
+    base_solver,
+    solver,
+    saveat,
+    stepsize_controller,
+    dual_y0=False,
+    t0_equals_t1=False,
 ):
     loss, grads_base = _loss(
         y0__args__term,
@@ -63,6 +82,7 @@ def _compare_grads(
         adjoint=diffrax.RecursiveCheckpointAdjoint(),
         stepsize_controller=stepsize_controller,
         dual_y0=dual_y0,
+        t0_equals_t1=t0_equals_t1,
     )
     loss, grads_reversible = _loss(
         y0__args__term,
@@ -71,6 +91,7 @@ def _compare_grads(
         adjoint=diffrax.ReversibleAdjoint(),
         stepsize_controller=stepsize_controller,
         dual_y0=dual_y0,
+        t0_equals_t1=t0_equals_t1,
     )
     assert tree_allclose(grads_base, grads_reversible, atol=1e-5)
 
@@ -130,9 +151,7 @@ def test_reversible_heun_ode(stepsize_controller, saveat):
     args = jnp.array([0.5])
     solver = diffrax.ReversibleHeun()
 
-    _compare_grads(
-        (y0, args, terms), solver, solver, saveat, stepsize_controller, dual_y0=False
-    )
+    _compare_grads((y0, args, terms), solver, solver, saveat, stepsize_controller)
 
 
 @pytest.mark.parametrize(
@@ -161,9 +180,7 @@ def test_reversible_heun_sde(stepsize_controller, saveat):
     args = jnp.array([0.5])
     solver = diffrax.ReversibleHeun()
 
-    _compare_grads(
-        (y0, args, terms), solver, solver, saveat, stepsize_controller, dual_y0=False
-    )
+    _compare_grads((y0, args, terms), solver, solver, saveat, stepsize_controller)
 
 
 @pytest.mark.parametrize(
@@ -189,9 +206,7 @@ def test_leapfrog_midpoint(stepsize_controller, saveat):
     args = jnp.array([0.5])
     solver = diffrax.LeapfrogMidpoint()
 
-    _compare_grads(
-        (y0, args, terms), solver, solver, saveat, stepsize_controller, dual_y0=False
-    )
+    _compare_grads((y0, args, terms), solver, solver, saveat, stepsize_controller)
 
 
 @pytest.mark.parametrize(
@@ -226,14 +241,7 @@ def test_reversible_explicit(stepsize_controller, saveat):
     if saveat.subs.ts is not None:
         base_solver = solver
 
-    _compare_grads(
-        (y0, args, terms),
-        base_solver,
-        solver,
-        saveat,
-        stepsize_controller,
-        dual_y0=False,
-    )
+    _compare_grads((y0, args, terms), base_solver, solver, saveat, stepsize_controller)
 
 
 @pytest.mark.parametrize(
@@ -270,11 +278,33 @@ def test_reversible_sde(stepsize_controller, saveat):
     if saveat.subs.ts is not None:
         base_solver = solver
 
+    _compare_grads((y0, args, terms), base_solver, solver, saveat, stepsize_controller)
+
+
+@pytest.mark.parametrize(
+    "saveat",
+    [
+        diffrax.SaveAt(t0=True),
+        diffrax.SaveAt(t1=True),
+        diffrax.SaveAt(t0=True, t1=True),
+    ],
+)
+def test_reversible_t0_equals_t1(saveat):
+    n = 10
+    y0 = jnp.linspace(1, 10, num=n)
+    key = jr.PRNGKey(10)
+    f = VectorField(n, n, n, depth=4, key=key)
+    terms = diffrax.ODETerm(f)
+    args = jnp.array([0.5])
+    base_solver = diffrax.Tsit5()
+    solver = diffrax.UReversible(base_solver)
+    stepsize_controller = diffrax.ConstantStepSize()
+
     _compare_grads(
         (y0, args, terms),
         base_solver,
         solver,
         saveat,
         stepsize_controller,
-        dual_y0=False,
+        t0_equals_t1=True,
     )
