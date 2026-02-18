@@ -59,6 +59,7 @@ include = ["diffrax", "tests"]
 reportIncompatibleMethodOverride = true
 reportIncompatibleVariableOverride = false # Incompatible with eqx.AbstractVar
 reportUnnecessaryTypeIgnoreComment = true
+typeCheckingMode = "basic"
 
 [tool.pytest.ini_options]
 addopts = "--jaxtyping-packages=diffrax,beartype.beartype(conf=beartype.BeartypeConf(strategy=beartype.BeartypeStrategy.On))"

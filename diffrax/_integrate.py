@@ -6,7 +6,6 @@ from typing import (  # noqa: UP035
     cast,
     get_args,
     get_origin,
-    Optional,
     Tuple,
 )
 
@@ -22,7 +21,11 @@ import optimistix as optx
 import wadler_lindig as wl
 from jaxtyping import Array, ArrayLike, Float, Inexact, PyTree, Real
 
-from ._adjoint import AbstractAdjoint, RecursiveCheckpointAdjoint
+from ._adjoint import (
+    AbstractAdjoint,
+    CheckpointedReversibleAdjoint,
+    RecursiveCheckpointAdjoint,
+)
 from ._custom_types import (
     BoolScalarLike,
     BufferDenseInfos,
@@ -112,9 +115,12 @@ class State(eqx.Module):
     #
     # Information for reversible adjoint (save ts)
     #
-    reversible_init_ts: Optional[PyTree[FloatScalarLike]]
-    reversible_ts: Optional[eqxi.MaybeBuffer[Float[Array, " times_plus_1"]]]
-    reversible_save_index: Optional[IntScalarLike]
+    reversible_init_ts: PyTree[FloatScalarLike] | None
+    reversible_ts: eqxi.MaybeBuffer[Float[Array, " times_plus_1"]] | None
+    reversible_save_index: IntScalarLike | None
+    reversible_checkpointed_ts: eqxi.MaybeBuffer[Float[Array, " checkpoints"]] | None
+    reversible_checkpointed_ys: eqxi.MaybeBuffer[Float[Array, "checkpoints ..."]] | None
+    reversible_checkpointed_zs: eqxi.MaybeBuffer[Float[Array, "checkpoints ..."]] | None
 
 
 def _is_none(x: Any) -> bool:
@@ -227,7 +233,12 @@ def _outer_buffers(state):
     return (
         [s.ts for s in save_states]
         + [s.ys for s in save_states]
-        + [state.dense_ts, state.dense_infos, state.reversible_ts]
+        + [
+            state.dense_ts,
+            state.dense_infos,
+            state.reversible_ts,
+            state.reversible_checkpointed_ts,
+        ]
     )
 
 
@@ -636,12 +647,44 @@ def loop(
         reversible_init_ts = state.reversible_init_ts
         reversible_ts = state.reversible_ts
         reversible_save_index = state.reversible_save_index
+        reversible_checkpointed_ts = state.reversible_checkpointed_ts
+        reversible_checkpointed_ys = state.reversible_checkpointed_ys
+        reversible_checkpointed_zs = state.reversible_checkpointed_zs
 
         if state.reversible_ts is not None:
             reversible_ts = eqxi.buffer_at_set(
                 reversible_ts, reversible_save_index + 1, tprev, pred=keep_step
             )
             reversible_save_index = reversible_save_index + jnp.where(keep_step, 1, 0)
+
+        if state.reversible_checkpointed_ts is not None:
+            checkpoint_every = max_steps // reversible_checkpointed_ts.shape[0]
+            pred = jnp.where(
+                (reversible_save_index % checkpoint_every == 0),
+                True,
+                False,
+            )
+            _idx = reversible_save_index // checkpoint_every - 1
+            reversible_checkpointed_ts = eqxi.buffer_at_set(
+                reversible_checkpointed_ts,
+                _idx,
+                tprev,
+                pred=pred,
+            )
+
+            reversible_checkpointed_ys = eqxi.buffer_at_set(
+                reversible_checkpointed_ys,
+                _idx,
+                y,
+                pred=pred,
+            )
+
+            reversible_checkpointed_zs = eqxi.buffer_at_set(
+                reversible_checkpointed_zs,
+                _idx,
+                solver_state,
+                pred=pred,
+            )
 
         new_state = State(
             y=y,
@@ -655,7 +698,7 @@ def loop(
             num_accepted_steps=num_accepted_steps,
             num_rejected_steps=num_rejected_steps,
             save_state=save_state,
-            dense_ts=dense_ts,  # pyright: ignore[reportArgumentType]
+            dense_ts=dense_ts,
             dense_infos=dense_infos,
             dense_save_index=dense_save_index,
             progress_meter_state=progress_meter_state,
@@ -665,8 +708,11 @@ def loop(
             event_values=event_values,
             event_mask=event_mask,
             reversible_init_ts=reversible_init_ts,
-            reversible_ts=reversible_ts,  # pyright: ignore[reportArgumentType]
+            reversible_ts=reversible_ts,
             reversible_save_index=reversible_save_index,
+            reversible_checkpointed_ts=reversible_checkpointed_ts,
+            reversible_checkpointed_ys=reversible_checkpointed_ys,
+            reversible_checkpointed_zs=reversible_checkpointed_zs,
         )
 
         return (
@@ -1468,6 +1514,20 @@ def diffeqsolve(
         reversible_ts = jnp.full(max_steps + 1, jnp.inf, dtype=time_dtype)
         reversible_save_index = 0
 
+        if isinstance(adjoint, CheckpointedReversibleAdjoint):
+            max_save = max_steps // adjoint.checkpoint_every
+            reversible_checkpointed_ts = jnp.full(max_save, jnp.inf, dtype=time_dtype)
+            reversible_checkpointed_ys = jnp.full(
+                (max_save,) + y0.shape, jnp.inf, dtype=y0.dtype
+            )
+            reversible_checkpointed_zs = jnp.full(
+                (max_save,) + y0.shape, jnp.inf, dtype=y0.dtype
+            )
+        else:
+            reversible_checkpointed_ts = None
+            reversible_checkpointed_ys = None
+            reversible_checkpointed_zs = None
+
     # Initialise state
     init_state = State(
         y=y0,
@@ -1493,6 +1553,9 @@ def diffeqsolve(
         reversible_init_ts=reversible_init_ts,
         reversible_ts=reversible_ts,
         reversible_save_index=reversible_save_index,
+        reversible_checkpointed_ts=reversible_checkpointed_ts,
+        reversible_checkpointed_ys=reversible_checkpointed_ys,
+        reversible_checkpointed_zs=reversible_checkpointed_zs,
     )
 
     #

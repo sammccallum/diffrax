@@ -55,7 +55,7 @@ def _loss(
         y0=y0,
         args=args,
         saveat=saveat,
-        max_steps=4096,
+        max_steps=500,
         adjoint=adjoint,
         stepsize_controller=stepsize_controller,
     )
@@ -92,6 +92,35 @@ def _compare_grads(
         stepsize_controller=stepsize_controller,
         dual_y0=dual_y0,
         t0_equals_t1=t0_equals_t1,
+    )
+    assert tree_allclose(grads_base, grads_reversible, atol=1e-5)
+
+
+def _compare_checkpointed_grads(
+    y0__args__term,
+    base_solver,
+    solver,
+    saveat,
+    stepsize_controller,
+    checkpoint_every,
+):
+    loss, grads_base = _loss(
+        y0__args__term,
+        base_solver,
+        saveat,
+        adjoint=diffrax.RecursiveCheckpointAdjoint(),
+        stepsize_controller=stepsize_controller,
+        dual_y0=False,
+        t0_equals_t1=False,
+    )
+    loss, grads_reversible = _loss(
+        y0__args__term,
+        solver,
+        saveat,
+        adjoint=diffrax.CheckpointedReversibleAdjoint(checkpoint_every),
+        stepsize_controller=stepsize_controller,
+        dual_y0=False,
+        t0_equals_t1=False,
     )
     assert tree_allclose(grads_base, grads_reversible, atol=1e-5)
 
@@ -307,4 +336,27 @@ def test_reversible_t0_equals_t1(saveat):
         saveat,
         stepsize_controller,
         t0_equals_t1=True,
+    )
+
+
+def test_reversible_checkpointed():
+    n = 10
+    y0 = jnp.linspace(1, 10, num=n)
+    key = jr.PRNGKey(10)
+    f = VectorField(n, n, n, depth=4, key=key)
+    terms = diffrax.ODETerm(f)
+    args = jnp.array([0.5])
+    base_solver = diffrax.Tsit5()
+    solver = diffrax.UReversible(base_solver, coupling_parameter=0.8)
+    saveat = diffrax.SaveAt(t1=True)
+    stepsize_controller = diffrax.ConstantStepSize()
+    checkpoint_every = 100
+
+    _compare_checkpointed_grads(
+        (y0, args, terms),
+        base_solver,
+        solver,
+        saveat,
+        stepsize_controller,
+        checkpoint_every,
     )

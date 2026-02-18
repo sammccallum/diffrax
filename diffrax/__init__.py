@@ -3,6 +3,7 @@ import importlib.metadata
 from ._adjoint import (
     AbstractAdjoint as AbstractAdjoint,
     BacksolveAdjoint as BacksolveAdjoint,
+    CheckpointedReversibleAdjoint as CheckpointedReversibleAdjoint,
     DirectAdjoint as DirectAdjoint,
     ForwardMode as ForwardMode,
     ImplicitAdjoint as ImplicitAdjoint,
