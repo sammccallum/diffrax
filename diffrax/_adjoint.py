@@ -1358,9 +1358,15 @@ def _loop_reversible_bwd(
 
         t0_idx = ts_index - 1
         pred = (t0_idx % checkpoint_every == 0) & (t0_idx != 0)
-        y0 = jnp.where(pred, c_ys[t0_idx // checkpoint_every - 1], y0)
-        solver_state = jnp.where(
-            pred, c_zs[t0_idx // checkpoint_every - 1], solver_state
+        y0 = jtu.tree_map(
+            lambda _cy, _y: jnp.where(pred, _cy, _y),
+            (ω(c_ys)[t0_idx // checkpoint_every - 1]).ω,
+            y0,
+        )
+        solver_state = jtu.tree_map(
+            lambda _cz, _z: jnp.where(pred, _cz, _z),
+            (ω(c_zs)[t0_idx // checkpoint_every - 1]).ω,
+            solver_state,
         )
 
         # Pull gradients back through interpolation
@@ -1437,7 +1443,6 @@ def _loop_reversible_bwd(
     grad_y0 = eqx.apply_updates(grad_y0, dgrad_y0)
     grad_terms = eqx.apply_updates(grad_terms, dgrad_terms)
     grad_args = eqx.apply_updates(grad_args, dgrad_args)
-
     return grad_y0, grad_args, grad_terms
 
 

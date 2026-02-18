@@ -672,18 +672,16 @@ def loop(
                 pred=pred,
             )
 
-            reversible_checkpointed_ys = eqxi.buffer_at_set(
-                reversible_checkpointed_ys,
-                _idx,
+            reversible_checkpointed_ys = jtu.tree_map(
+                lambda _y, _ys: eqxi.buffer_at_set(_ys, _idx, _y, pred=pred),
                 y,
-                pred=pred,
+                reversible_checkpointed_ys,
             )
 
-            reversible_checkpointed_zs = eqxi.buffer_at_set(
-                reversible_checkpointed_zs,
-                _idx,
+            reversible_checkpointed_zs = jtu.tree_map(
+                lambda _z, _zs: eqxi.buffer_at_set(_zs, _idx, _z, pred=pred),
                 solver_state,
-                pred=pred,
+                reversible_checkpointed_zs,
             )
 
         new_state = State(
@@ -1509,6 +1507,10 @@ def diffeqsolve(
         reversible_init_ts = None
         reversible_ts = None
         reversible_save_index = None
+        reversible_checkpointed_ts = None
+        reversible_checkpointed_ys = None
+        reversible_checkpointed_zs = None
+
     else:
         reversible_init_ts = (tprev, tnext)
         reversible_ts = jnp.full(max_steps + 1, jnp.inf, dtype=time_dtype)
@@ -1517,12 +1519,13 @@ def diffeqsolve(
         if isinstance(adjoint, CheckpointedReversibleAdjoint):
             max_save = max_steps // adjoint.checkpoint_every
             reversible_checkpointed_ts = jnp.full(max_save, jnp.inf, dtype=time_dtype)
-            reversible_checkpointed_ys = jnp.full(
-                (max_save,) + y0.shape, jnp.inf, dtype=y0.dtype
+            _make_full = lambda x: jnp.full(
+                (max_save,) + x.shape, jnp.inf, dtype=x.dtype
             )
-            reversible_checkpointed_zs = jnp.full(
-                (max_save,) + y0.shape, jnp.inf, dtype=y0.dtype
-            )
+
+            reversible_checkpointed_ys = jtu.tree_map(_make_full, y0)
+            reversible_checkpointed_zs = jtu.tree_map(_make_full, y0)
+
         else:
             reversible_checkpointed_ts = None
             reversible_checkpointed_ys = None
