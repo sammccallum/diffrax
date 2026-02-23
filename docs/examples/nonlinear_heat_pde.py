@@ -1,9 +1,9 @@
+import time
 from collections.abc import Callable
 
 import diffrax
 import equinox as eqx  # https://github.com/patrick-kidger/equinox
 import jax
-import jax.lax as lax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 from jaxtyping import Array, Float  # https://github.com/google/jaxtyping
@@ -82,30 +82,27 @@ y0 = SpatialDiscretisation.discretise_fn(x0, x_final, n, ic)
 # Temporal discretisation
 t0 = 0
 t_final = 1
-δt = 0.0001
+dt = 0.0002
+max_steps = int(1 / dt)
+print(max_steps)
 saveat = diffrax.SaveAt(ts=jnp.linspace(t0, t_final, 50))
 
-# Tolerances
-rtol = 1e-10
-atol = 1e-10
-stepsize_controller = diffrax.PIDController(
-    pcoeff=0.3, icoeff=0.4, rtol=rtol, atol=atol, dtmax=0.001
-)
 stepsize_controller = diffrax.ConstantStepSize()
 
 # Solve with Tsit5
 base_solver = diffrax.Tsit5()
-solver = diffrax.UReversible(base_solver, coupling_parameter=0.8)
+solver = diffrax.UReversible(base_solver, coupling_parameter=0.65)
+# solver = base_solver
 sol = diffrax.diffeqsolve(
     term,
     solver,
     t0,
     t_final,
-    δt,
+    dt,
     y0,
     saveat=saveat,
     stepsize_controller=stepsize_controller,
-    max_steps=10_000,
+    max_steps=max_steps,
 )
 
 plt.figure(figsize=(5, 5))
@@ -120,33 +117,44 @@ plt.xlabel("x")
 plt.ylabel("t", rotation=0)
 plt.clim(0, 1)
 plt.colorbar()
-plt.savefig("nonlinear_heat_pde_rev.png", dpi=150, bbox_inches="tight")
+plt.savefig("nonlinear_heat_pde.png", dpi=150, bbox_inches="tight")
 plt.close()
+print("Saved nonlinear_heat_pde.png")
 
 
 @eqx.filter_value_and_grad
-def grad_loss(y0, solver, adjoint):
+def grad_loss(y0, solver, adjoint, dt=0.0001):
+    max_steps = int(1 / dt)
     sol = diffrax.diffeqsolve(
         term,
         solver,
         t0,
         t_final,
-        δt,
+        dt,
         y0,
         adjoint=adjoint,
         saveat=diffrax.SaveAt(t1=True),
         stepsize_controller=stepsize_controller,
-        max_steps=10_000,
+        max_steps=max_steps,
     )
     return jnp.mean(sol.ys.vals[0])
 
-# adjoint = diffrax.RecursiveCheckpointAdjoint()
-# loss, grads = grad_loss(y0, base_solver, adjoint)
-# print(loss)
-# print(grads.vals[:10])
 
-adjoint = diffrax.CheckpointedReversibleAdjoint(checkpoint_every=100)
-loss, grads = grad_loss(y0, solver, adjoint)
-print(loss)
+checkpoint_every = 80
+checkpoints = 10_000 // checkpoint_every
+
+adjoint = diffrax.RecursiveCheckpointAdjoint(checkpoints)
+loss, grads = grad_loss(y0, base_solver, adjoint)
+tic = time.time()
+loss, grads = grad_loss(y0, base_solver, adjoint)
+toc = time.time()
 print(grads.vals[:10])
+print(f"RecursiveCheckpointAdjoint: {(toc - tic):.2f}s")
 
+adjoint = diffrax.CheckpointedReversibleAdjoint(checkpoint_every)
+loss, grads = grad_loss(y0, solver, adjoint, dt)
+tic = time.time()
+loss, grads = grad_loss(y0, solver, adjoint, dt)
+toc = time.time()
+print(grads.vals[:10])
+print(f"ReversibleAdjoint: {(toc - tic):.2f}s")
