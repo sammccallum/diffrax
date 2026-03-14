@@ -49,6 +49,12 @@ from .shark import ShARK as ShARK
 from .shark_general import GeneralShARK as GeneralShARK
 from .should import ShOULD as ShOULD
 from .sil3 import Sil3 as Sil3
+from .simple import (
+    Bosh3Simple as Bosh3Simple,
+    MidpointSimple as MidpointSimple,
+    RK3Simple as RK3Simple,
+    RK4Simple as RK4Simple,
+)
 from .slowrk import SlowRK as SlowRK
 from .spark import SPaRK as SPaRK
 from .sra1 import SRA1 as SRA1

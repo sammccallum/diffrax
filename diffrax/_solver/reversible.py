@@ -106,7 +106,8 @@ class UReversible(
         return self.solver.strong_order(terms)
 
     def __init__(self, solver: AbstractERK, coupling_parameter: float = 0.999):
-        self.solver = eqx.tree_at(lambda s: s.disable_fsal, solver, True)
+        # self.solver = eqx.tree_at(lambda s: s.disable_fsal, solver, True)
+        self.solver = solver
         self.coupling_parameter = coupling_parameter
 
     def init(
@@ -117,10 +118,6 @@ class UReversible(
         y0: Y,
         args: Args,
     ) -> _SolverState:
-        if not isinstance(self.solver, AbstractERK):
-            raise ValueError(
-                "`UReversible` is only compatible with `AbstractERK` base solvers."
-            )
         return y0
 
     def step(

@@ -1,5 +1,7 @@
 import time
 from collections.abc import Callable
+from math import nan
+from tabnanny import check
 
 import diffrax
 import equinox as eqx  # https://github.com/patrick-kidger/equinox
@@ -82,7 +84,7 @@ y0 = SpatialDiscretisation.discretise_fn(x0, x_final, n, ic)
 # Temporal discretisation
 t0 = 0
 t_final = 1
-dt = 0.0002
+dt = 0.0001
 max_steps = int(1 / dt)
 print(max_steps)
 saveat = diffrax.SaveAt(ts=jnp.linspace(t0, t_final, 50))
@@ -91,7 +93,7 @@ stepsize_controller = diffrax.ConstantStepSize()
 
 # Solve with Tsit5
 base_solver = diffrax.Tsit5()
-solver = diffrax.UReversible(base_solver, coupling_parameter=0.65)
+solver = diffrax.UReversible(base_solver, coupling_parameter=0.5)
 # solver = base_solver
 sol = diffrax.diffeqsolve(
     term,
@@ -140,21 +142,47 @@ def grad_loss(y0, solver, adjoint, dt=0.0001):
     return jnp.mean(sol.ys.vals[0])
 
 
-checkpoint_every = 80
-checkpoints = 10_000 // checkpoint_every
+def compare_runtimes():
+    checkpoint_every = 80
+    checkpoints = 10_000 // checkpoint_every
 
-adjoint = diffrax.RecursiveCheckpointAdjoint(checkpoints)
-loss, grads = grad_loss(y0, base_solver, adjoint)
-tic = time.time()
-loss, grads = grad_loss(y0, base_solver, adjoint)
-toc = time.time()
-print(grads.vals[:10])
-print(f"RecursiveCheckpointAdjoint: {(toc - tic):.2f}s")
+    adjoint = diffrax.RecursiveCheckpointAdjoint(checkpoints)
+    loss, grads = grad_loss(y0, base_solver, adjoint)
+    tic = time.time()
+    loss, grads = grad_loss(y0, base_solver, adjoint)
+    toc = time.time()
+    print(grads.vals[:10])
+    print(f"RecursiveCheckpointAdjoint: {(toc - tic):.2f}s")
 
-adjoint = diffrax.CheckpointedReversibleAdjoint(checkpoint_every)
-loss, grads = grad_loss(y0, solver, adjoint, dt)
-tic = time.time()
-loss, grads = grad_loss(y0, solver, adjoint, dt)
-toc = time.time()
-print(grads.vals[:10])
-print(f"ReversibleAdjoint: {(toc - tic):.2f}s")
+    adjoint = diffrax.CheckpointedReversibleAdjoint(checkpoint_every)
+    loss, grads = grad_loss(y0, solver, adjoint, dt)
+    tic = time.time()
+    loss, grads = grad_loss(y0, solver, adjoint, dt)
+    toc = time.time()
+    print(grads.vals[:10])
+    print(f"ReversibleAdjoint: {(toc - tic):.2f}s")
+
+
+def compare_asymptotics():
+    checkpoint_every = 10
+    base_solver = diffrax.Tsit5()
+    solver = diffrax.UReversible(base_solver, coupling_parameter=0.6)
+    adjoint = diffrax.CheckpointedReversibleAdjoint(checkpoint_every)
+    dts = [0.0001, 0.00005, 0.00001]
+    runtimes = []
+
+    for dt in dts:
+        print("Compile grad_loss")
+        loss, grads = grad_loss(y0, solver, adjoint, dt)
+        print("Run grad_loss")
+        tic = time.time()
+        loss, grads = grad_loss(y0, solver, adjoint, dt)
+        toc = time.time()
+        runtimes.append(toc - tic)
+
+        nan_check = jnp.isnan(grads.vals)
+        assert not nan_check.any()
+
+    plt.plot(dts, runtimes, ".-")
+    plt.savefig("runtimes.png")
+
