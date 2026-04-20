@@ -451,7 +451,8 @@ class AbstractSRK(AbstractSolver[_SolverState]):
 
             if self.tableau.coeffs_hh is not None:  # space-time Lévy area
                 assert isinstance(bm_inc, AbstractSpaceTimeLevyArea)
-                levylist_kgs.append(diffusion.prod(g0, (direction * bm_inc.H**ω).ω))
+                with jax.numpy_dtype_promotion("standard"):
+                    levylist_kgs.append(diffusion.prod(g0, (direction * bm_inc.H**ω).ω))
                 a_levy.append(jnp.asarray(self.tableau.coeffs_hh.a, dtype=dtype))
 
             if self.tableau.coeffs_kk is not None:  # space-time-time Lévy area
@@ -619,7 +620,8 @@ class AbstractSRK(AbstractSolver[_SolverState]):
             # g depends on t. This term is of the form $(g1 - g0) * (0.5*W_n - H_n)$.
             if self.tableau.coeffs_hh is not None:  # space-time Lévy area
                 assert isinstance(bm_inc, AbstractSpaceTimeLevyArea)
-                time_var_contr = (bm_inc.W**ω - 2.0 * direction * bm_inc.H**ω).ω
+                with jax.numpy_dtype_promotion("standard"):
+                    time_var_contr = (bm_inc.W**ω - 2.0 * direction * bm_inc.H**ω).ω
                 time_var_term = diffusion.prod(g_delta, time_var_contr)
             else:
                 time_var_term = diffusion.prod(g_delta, bm_inc.W)
